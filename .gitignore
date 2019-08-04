@@ -1,0 +1,7 @@
+db.sqlite3
+*.log
+*.pyc
+*.pyc
+*.swp
+*.cnf
+env/*

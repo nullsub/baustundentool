@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block content %}
+
+<script type="text/javascript">
+	var $entry_array = {{ entry_array | safe }};
+	var $user_array = {{ user_array | safe }};
+$(document).ready(function() {
+	function getUserName(d) {
+		for (var i = 0; i < $user_array.length; i+=2) {
+			if($user_array[i] == d)
+				return $user_array[i+1];
+		}
+		return '';
+	}
+	function getProjectName(d) {
+		val = $("option[id=project-id-" + d + "]");
+		return val.val();
+	}
+	$("#navlink_index").parent().addClass('active');
+
+	for (var i = 0; i < $entry_array.length; i+=7) {
+		$('#baustunden_table > tbody:last').prepend(
+			"<tr class=\"searchable\" >" +
+			"	<td class=\"entryname\">" + getUserName($entry_array[i+1]) + "</td> " +
+			"	<td class=\"entrydate\">" + $entry_array[i+2] + "</td> " +
+			"	<td class=\"text-left\">" + $entry_array[i+3] + "</td> " +
+			"	<td>" + getProjectName($entry_array[i+4]) + "</td> " +
+			"	<td id=\"entrydauer_" + $entry_array[i]  + "\">" + $entry_array[i+5] + "</td>" +
+			"	<td id=\"entryaccepted_" + $entry_array[i] + "\">" + getUserName($entry_array[i+6]) + "</td>" +
+			"</tr>"
+		);
+	}
+
+	add_ok_del_buttons();
+	update_entries();
+
+	$year = (new moment).year();
+	for(var $i = 2016; $i <= $year+1; $i++) {
+		$("#season_select").append('<option ' + ({{season}} == $i ? 'selected="1" ' : '') + 'value="/' + $i + '">' + ($i-1) % 100  + '/' + $i % 100 + '</option>');
+	}
+	$("#export_xls").attr("href", "/export/xls" + $("#season_select").val());
+
+	function change_datum(d) {
+		$('#datum').val(d.format("D.M.YY"));
+	}
+	change_datum(new moment());
+	$('#datum').daterangepicker({
+		singleDatePicker: true,
+		showDropdowns: true,
+		locale: {
+			format: 'D.M.YY'
+		},
+		drops: 'down'
+	}, change_datum);
+
+	var delay = (function(){
+		var timer = 0;
+		return function(callback, ms){
+			clearTimeout (timer);
+			timer = setTimeout(callback, ms);
+		};
+	})();
+
+	$('#filter').keyup(function() {
+		delay(function(){
+			update_entries();
+		}, 400 );
+	});
+
+	function update_entries() {
+		var rex = new RegExp($('#filter').val(), 'i');
+		var $sum = 0.0;
+               $('.searchable tr:not(.deleted)').each(function () {
+			var $html = $(this).children('[id^="entryaccepted_"]').html();
+			$(this).children('[id^="entryaccepted_"]').html("");
+			var $ret = rex.test($(this).text());
+			$(this).children('[id^="entryaccepted_"]').html($html);
+			if(!$ret) {
+				$(this).hide();
+				return;
+			}
+			$(this).show();
+			$sum += parseFloat($(this).children('[id^="entrydauer"]')[0].textContent.replace(',', '.'));
+		});
+		$( "#baustundensumme").text("" + $sum + " Baustunden");
+	}
+
+	function add_ok_del_buttons() {
+		$('[id^="entryaccepted_"]').each(function( index ) {
+			if($(this).text() == '') {
+				$(this).html("");
+				if("{{request.user.userprofile.isleader}}" == "True" && $(this).parent().children(".entryname").text() != "{{user.last_name}}")
+					$(this).append("<button class=\"ok_button btn-xs\" title=\"Eintrag Bestätigen\" type=\"button\" value=\"Bestätigen\"><span class=\"glyphicon glyphicon-ok\"></span></button>");
+				if($(this).parent().children(".entryname").text() == "{{user.last_name}}")
+					$(this).append("<button class=\"del_button btn btn-xs\" title=\"Eintrag Löschen\" type=\"button\" value=\"Löschen\"><span class=\"glyphicon glyphicon-remove\"></span></button>");
+			}
+		});
+	}
+
+	var del_request;
+	$("tbody").on("click", "td", function(event){
+			if(!$(this).attr("id") || !$(this).attr("id").match("^entryaccepted_") || $(this).children().length == 0)
+				return;
+                        if(del_request)
+                                del_request.abort();
+
+			var $data = "csrfmiddlewaretoken={{csrf_token}}&" + "entry=" + $(this).attr("id").split("_").pop();
+			var $deleting = 1;
+			if ($(event.target).parents('.ok_button').length || $(event.target).hasClass("ok_button")) {
+				$data += "&entry_ok=1";
+				$deleting = 0;
+			}
+			else $data += "&entry_delete=1";
+
+                        request = $.ajax({
+                                url: "",
+                                type: "post",
+				data: $data
+                        });
+	
+                        request.done(function (response, textStatus, jqXHR){
+				$element = $("#entryaccepted_" + response.id);
+				if($deleting == 1) {
+					$element.parent().hide("slow");
+					$element.parent().addClass("deleted");
+				}
+				else {
+					$element.html("{{request.user.last_name}}");
+				}
+                        });
+
+                        // Callback handler that will be called on failure
+                        request.fail(function (jqXHR, textStatus, errorThrown){
+                        });
+
+                        // Callback handler that will be called regardless
+                        // if the request failed or succeeded
+                        request.always(function () {
+                                // Reenable the inputs
+                        });
+                });
+
+	var request;
+	$("#add_entry").submit(function(event){
+                        event.preventDefault();
+                        if (request)
+                                request.abort();
+                        if(!$("#beschreibung").val() || !$("#dauer").val())
+                                return false;
+
+                        // setup some local variables
+                        var $form = $(this);
+
+                        // Let's select and cache all the fields
+                        var $inputs = $form.find("input #datetext");
+
+                        // Serialize the data in the form
+                        var serializedData = $form.serialize();
+
+                        // Let's disable the inputs for the duration of the Ajax request.
+                        // Note: we disable elements AFTER the form data has been serialized.
+                        // Disabled form elements will not be serialized.
+                        $inputs.prop("disabled", true);
+
+                        // Fire off the request to /form.php
+                        request = $.ajax({
+                                url: "",
+                                type: "post",
+                                data: serializedData + '&datetext=' + moment($("#datum").val(), "DD.MM.YY").format("YYYY-MM-DD") + "&entry_add=1"
+                        });
+	
+                        request.done(function (response, textStatus, jqXHR){
+				if(response.id == "-1") {
+					alert(response.text)
+					return;
+				}
+                                // Log a message to the console
+                                $('#baustunden_table > tbody:last').prepend(
+					"<tr class=\"searchable\" id=\"added_" + response.id + "\">" +
+					"	<td class=\"entryname\">{{user.last_name}}</td> " +
+					"	<td class=\"entrydate\">" + $("#datum").val() + "</td> " +
+					"	<td>" + $("#beschreibung").val() + "</td> " +
+					"	<td>" + $("#projekt_name option:selected" ).text() + "</td> " +
+					"	<td id=\"entrydauer_" + response.id + "\">" + $("#dauer").val() + "</td> " +
+					"	<td id=\"entryaccepted_" + response.id + "\">" +
+					"</td>" + "</tr>");
+				$("#added_" + response.id).hide().show("slow");
+                                $("#beschreibung").val('');
+                                $("#dauer").val('');
+				update_entries();
+				add_ok_del_buttons();
+                        });
+
+                        // Callback handler that will be called on failure
+                        request.fail(function (jqXHR, textStatus, errorThrown){
+                                // Log the error to the console
+                                alert("The following error occurred: "+textStatus, errorThrown)
+                        });
+
+                        // Callback handler that will be called regardless
+                        // if the request failed or succeeded
+                        request.always(function () {
+                                // Reenable the inputs
+                                $inputs.prop("disabled", false);
+                        });
+                });
+});
+</script>
+<div class="col-sm-4 black text-center" style="margin-bottom:10px;"> 
+	<div class="input-group"> <span class="input-group-addon">Filtern</span>
+		<input id="filter" type="text" class="form-control" placeholder="Tabelle filtern">
+	</div>
+</div>
+<div class="col-sm-3 black text-center" style="margin-bottom:10px;"> 
+	Saison auswählen 
+	<select id="season_select" onchange="window.location=this.value">
+	</select>
+</div>
+<div class="col-sm-1 black text-center"> 
+	<div>
+		<a id="export_xls" href="">Excel Export</a>
+	</div>
+</div>
+<div class="col-sm-4 black text-center"> 
+	<div>
+		<h4 id="baustundensumme">0.0 Baustunden</h4>
+	</div>
+</div>
+<div class="col-sm-12 grey text-center"> 
+	<form id="add_entry">
+		{% csrf_token %}
+	<div class="table-responsive">
+		<table class="table table-striped" id="baustunden_table">
+			<thead>
+				<tr>
+					<th class="col-sm-2 text-center">Name</th>
+					<th class="col-sm-2 text-center">Datum</th>
+					<th class="col-sm-3 sorttable_nosort text-center">Beschreibung</th>
+					<th class="col-sm-2 text-center">Projekt</th>
+					<th class="col-sm-1 text-center">Dauer (Std)</th>
+					<th class="col-sm-2 sorttable_nosort text-center">Bestätigung</th>
+				</tr>
+				<tr>
+					<th class="sorttable_nosort text-center" >Neuer Eintrag</th>
+					<th class="sorttable_nosort"> <input class="text-center form-control" id="datum" type="text" name="datum"/></th>
+					<th class="sorttable_nosort"><input type="text" class="form-control" id="beschreibung" name="beschreibung" placeholder="Beschreibung"></th>
+					<th class="sorttable_nosort"><select id="projekt_name" class="form-control" name="projekt_name" >
+						{% for projekt in project_list %}
+							<option id="project-id-{{projekt.id}}" value="{{projekt.name}}">{{projekt.name}}</option>
+						{% endfor %}
+					</select></th>
+					<th class="sorttable_nosort"><input class="text-center form-control" type="number" step="0.5" min="0" id="dauer" name="dauer" placeholder="Dauer"></th>
+		<th class="sorttable_nosort text-center"><button title="Eintraghhinzufügen" id="add_button" class="btn btn-default" type="submit"><span class="glyphicon glyphicon-plus"></span></button></th>
+				</tr>
+			</thead>
+			<tbody class="searchable">
+			</tbody>
+			<tfoot>
+			</tfoot>
+		</table>
+		</div>
+	</form>
+</div>
+{% endblock %}

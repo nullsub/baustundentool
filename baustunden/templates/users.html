@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block content %}
+{% load static from staticfiles %}
+
+<script type="text/javascript">
+
+$(document).ready(function() {
+	$("#navlink_users").parent().addClass('active');
+	sorttable.init()
+	function sort_entries() {
+		sorttable.innerSortFunction.apply($("th")[0], []);
+		sorttable.innerSortFunction.apply($("th")[1], []);
+	}
+
+	$year = (new moment).year();
+	for(var $i = 2016; $i <= $year+1; $i++) {
+		$("#season_select").append('<option ' + ({{season}} == $i ? 'selected="1" ' : '') + 'value="/users/' + $i + '">' + ($i-1) % 100  + '/' + $i % 100 + '</option>');
+	}
+
+	update_entries();
+	sort_entries();
+
+	var delay = (function(){
+		var timer = 0;
+		return function(callback, ms){
+			clearTimeout (timer);
+			timer = setTimeout(callback, ms);
+		};
+	})();
+
+	$('#filter').keyup(function() {
+		delay(function(){
+			update_entries();
+		}, 400 );
+	});
+
+	$('#only_approved').change(function(event){
+		update_entries();
+		sort_entries();	
+        })
+
+	function update_entries() {
+		var rex = new RegExp($('#filter').val(), 'i');
+		$('.searchable tr').hide();
+		$('.searchable tr').filter(function () {
+			return rex.test($(this).text());
+		}).show();
+
+		var $sum = 0.0;
+		var $entry_array = {{ entry_array | safe }};
+		$('[id^="stunden"]').html("0.0");
+		for (var i = 0; i < $entry_array.length; i+=4) {
+			if ($('#only_approved').is(':checked')) {
+				if($entry_array[i+3] == 1)
+					continue;
+			}
+
+			var $stunden = $('#stunden' + $entry_array[i]);
+			$stunden.html(parseFloat($stunden.html().replace(',','.')) + $entry_array[i+1]);
+			$sum += $entry_array[i+1];
+		}
+		$( "#baustundensumme").text("" + $sum + " Baustunden");
+		$('[id^="stunden"]').each(function() {
+			//season starts at first of October
+			$startdate = moment([parseInt({{season}})-1, 9, 1]);
+			$enddate = new moment;
+			if($enddate.isAfter(moment([parseInt({{season}}),9,1])))
+				$enddate = moment([parseInt({{season}}),9,1]);
+			//Berechnungsinterval für Monatsschnitt beginnt bei neuen Mitgliedern mit dem Beitrittsdatum
+			$user_entrydate = $(this).parent().find(".entrydate").text();
+			if($user_entrydate != "" && $startdate.isBefore(moment($user_entrydate, "D.M.YY")))
+				$startdate = moment($user_entrydate, "D.M.YY");
+			
+			$months = $enddate.diff($startdate, 'months', true);
+			$stunden = parseFloat($(this).html().replace(',','.'))
+			$schnitt = ($stunden/$months).toFixed(3);
+			$(this).parent().find(".schnitt_fly").hide();
+			$(this).parent().find(".schnitt_nofly").hide();
+			if($schnitt >= 15.0 || $stunden >= 135.0)
+				$(this).parent().find(".schnitt_fly").show();
+			else
+				$(this).parent().find(".schnitt_nofly").show();
+			$(this).parent().find(".schnitt").text($schnitt + " ");
+		})
+	}
+
+	var request;
+	$('[id^="leader_"]').click(function(event){
+			event.preventDefault();
+			return;
+                        if (request)
+                                request.abort();
+		
+		{% if not request.user.userprofile.isleader %}	
+			event.preventDefault();
+			return;
+		{% endif %}
+
+			var $data = "csrfmiddlewaretoken={{csrf_token}}&" + "userid=" + $(this).attr("id").split("_").pop()
+                        // Fire off the request to /form.php
+                        request = $.ajax({
+                                url: "",
+                                type: "post",
+				data: $data,
+                        });
+                });
+});
+</script>
+<div class="col-sm-4 black text-center" style="margin-bottom: 10px;"> 
+	<div class="input-group"> <span class="input-group-addon">Filtern</span>
+		<input id="filter" type="text" class="form-control" placeholder="Tabelle filtern">
+	</div>
+</div>
+<div class="col-sm-4 black text-center"> 
+	Saison auswählen 
+	<select id="season_select" onchange="window.location=this.value">
+	</select>
+</div>
+<div class="col-sm-4 black text-center"> 
+	<div class="checkbox">
+		<label>
+			<input id="only_approved" type="checkbox" checked>Nur bestätigte Einträge einberechnen
+		</label>
+	</div>
+</div>
+
+<style>
+	.schnitt_fly, .schnitt_nofly, .schnitt{
+		display: inline-block;
+	}
+</style>
+<div class="col-sm-12 grey text-center"> 
+	<form id="add_entry">
+		{% csrf_token %}
+		<table class="sortable table table-striped" id="baustunden_table">
+			<thead>
+				<tr>
+					<th class="text-center">Name</th>
+					<th class="text-center">Baustunden</th>
+					<th class="text-center">Monatsschnitt</th>
+					<th class="sorttable_nosort text-center">Leiter, kann Bestätigen</th>
+				</tr>
+			</thead>
+			<tbody class="searchable">
+			{% for user_profile in profile_list %}
+				<tr>
+					<td>{{user_profile.user.last_name}}{{user_profile.entrydate0}}</td>
+					<td id="stunden{{user_profile.user.id}}">0.0</td>
+					<td><div class="schnitt">0.0</div>&nbsp;&nbsp
+						<div class="schnitt_fly" title="Darf Fliegen"> 
+							        <img src="{% static "plane.png" %}" style="width:45px;">
+						</div>
+						<div class="schnitt_nofly" title="Ungenügend Baustunden zum Fliegen">
+							        <img src="{% static "noplane.png" %}" style="width:45px;">
+						</div>
+					</td>
+					<td>
+						<input type="checkbox" {% if user_profile.isleader %}checked{% endif %} id="leader_{{user_profile.user.id}}"
+							name="leader_checkbox" value="unit-in-group"/>
+					</td>
+					<td style="display:none" class="entrydate">{{user_profile.entrydate| date:"d.m.y" }}</td>
+				</tr>
+			{% endfor %}
+			</tbody>
+			<tfoot>
+			</tfoot>
+		</table>
+	</form>
+</div>
+{% endblock %}

@@ -1,0 +1,2 @@
+start tunnel:
+ssh -L 1111:localhost:389 admin@akaflieg-dresden.de

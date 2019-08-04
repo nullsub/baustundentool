@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block content %}
+
+<script type="text/javascript">
+
+$(document).ready(function() {
+	$("#navlink_projects").parent().addClass('active');
+	$year = (new moment).year();
+	for(var $i = 2016; $i <= $year+1; $i++) {
+		$("#season_select").append('<option ' + ({{season}} == $i ? 'selected="1" ' : '') + 'value="/projects/' + $i + '">' + ($i-1) % 100  + '/' + $i % 100 + '</option>');
+	}
+	
+	update_entries();
+
+	function update_entries() {
+		var rex = new RegExp($('#filter').val(), 'i');
+		$('.searchable tr').hide();
+		$('.searchable tr').filter(function () {
+			return rex.test($(this).text());
+		}).show();
+
+		var $sum = 0.0;
+		var $entry_array = {{ entry_array | safe }};
+		$('[id^="stunden_"]').html("0.0");
+		for (var i = 0; i < $entry_array.length; i+=3) {
+			var $stunden = $('#stunden_' + $entry_array[i]);
+
+			$stunden.html(parseFloat($stunden.html().replace(',','.')) + $entry_array[i+1]);
+			if($stunden.is(":visible"))
+				$sum += $entry_array[i+1];
+		}
+		$( "#baustundensumme").text("" + $sum + " Baustunden");
+	}
+
+	function add_del_buttons() {
+		$('[id^="delete_"]').each(function( index ) {
+			if($(this).parent().children('[id^="stunden_"]').text() == '0.0') {
+				if("{{request.user.userprofile.isleader}}" == "True")
+					$(this).html("<button class=\"del_button\" title=\"Eintrag Löschen\" type=\"button\" value=\"Löschen\"><span class=\"glyphicon glyphicon-remove\"></span></button>");
+			}
+		});
+	}
+//	add_del_buttons();
+
+	var del_request;
+	$("tbody").on("click", "td", function(event){
+			if(!$(this).attr("id") || !$(this).attr("id").match("^delete_") || $(this).children().length == 0)
+				return;
+			if($(this).parent().children('[id^="stunden_"]').text() != '0.0')
+				return;
+                        if (del_request)
+                                del_request.abort();
+
+			var $data = "csrfmiddlewaretoken={{csrf_token}}&" + "project=" + $(this).attr("id").split("_").pop();
+			$data += "&project_delete=1";
+
+                        request = $.ajax({
+                                url: "",
+                                type: "post",
+				data: $data
+                        });
+	
+                        request.done(function (response, textStatus, jqXHR){
+				$element = $("#delete_" + response.id);
+				$element.parent().hide("slow");
+				$element.parent().addClass("deleted");
+                        });
+
+                        // Callback handler that will be called on failure
+                        request.fail(function (jqXHR, textStatus, errorThrown){
+                        });
+
+                        // Callback handler that will be called regardless
+                        // if the request failed or succeeded
+                        request.always(function () {
+                                // Reenable the inputs
+                        });
+                });
+
+	var request;
+	$("#add_entry").submit(function(event){
+                        event.preventDefault();
+                        if (request)
+                                request.abort();
+                        if(!$("#name").val())
+                                return false;
+			var $exists = false;
+			$( ".project_name" ).each(function( index ) {
+				if($("#name").val() == $(this).text()) {
+					$(this).effect( "shake", "slow" );
+					$exists = true;
+				}
+			});
+			if($exists == true)
+				return;	
+
+                        // setup some local variables
+                        var $form = $(this);
+
+                        // Let's select and cache all the fields
+                        var $inputs = $form.find("input");
+
+                        // Serialize the data in the form
+                        var serializedData = $form.serialize();
+
+                        // Let's disable the inputs for the duration of the Ajax request.
+                        // Note: we disable elements AFTER the form data has been serialized.
+                        // Disabled form elements will not be serialized.
+                        $inputs.prop("disabled", true);
+
+                        // Fire off the request to /form.php
+                        request = $.ajax({
+                                url: "",
+                                type: "post",
+                                data: serializedData + "&project_add=1"
+                        });
+
+                        // Callback handler that will be called on success
+                        request.done(function (response, textStatus, jqXHR){
+                                // Log a message to the console
+                                $('#main_table > tbody:last').append(
+					"<tr>" +
+					"	<td class=\"project_name\">" + $("#name").val() + "</td>" +
+					"	<td id=\"stunden_" + response.id + "\">0.0</td>" +
+					"	<td id=\"delete_" + response.id + "\"></td>" +
+					"</tr>");
+                                $("#name").val(''); //empty text field on successful
+				add_del_buttons();
+                        });
+
+                        // Callback handler that will be called on failure
+                        request.fail(function (jqXHR, textStatus, errorThrown){
+                                // Log the error to the console
+                                alert("The following error occurred: "+textStatus, errorThrown)
+                        });
+
+                        // Callback handler that will be called regardless
+                        // if the request failed or succeeded
+                        request.always(function () {
+                                // Reenable the inputs
+                                $inputs.prop("disabled", false);
+                        });
+                });
+});
+</script>
+
+<div class="col-sm-4 black text-center" style="margin-left:30%; margin-bottom: 10px;">
+	Saison auswählen 
+	<select id="season_select" onchange="window.location=this.value">
+	</select>
+</div>
+<div class="hidden col-sm-4 black text-center" > 
+	<div>
+		<h4 id="baustundensumme">0.0 Baustunden</h4>
+	</div>
+</div>
+<div class="col-sm-12 grey text-center"> 
+	<form id="add_entry">
+		{% csrf_token %}
+		<div class="table-responsive">
+			<table class="sortable table table-striped" id="main_table">
+				<thead>
+					<tr>
+						<th class="text-center">Projekt</th>
+						<th class="text-center">Baustunden</th>
+						<!--<th class="sorttable_nosort text-center">Löschen</th>--!>
+					</tr>
+				</thead>
+				<tbody class="searchable">
+					{% for project in project_list %}
+						<tr>
+							<td class="project_name">{{project.name}}</td>
+							<td id="stunden_{{project.id}}">0.0</td>
+							<!--<td id="delete_{{project.id}}"></td>--!>
+						</tr>
+					{% endfor %}
+				</tbody>
+				<tfoot>
+	{% if request.user.userprofile.isleader %}
+					<tr>
+						<td><input type="text" class="form-control" id="name" name="name" placeholder="Projektname"></td>
+						<td><button title="Eintrag hinzufügen" id="add_button" class="btn btn-default" type="submit"><span class="glyphicon glyphicon-plus"></span></button></td>
+						<td></td>
+					</tr>
+	{% endif %}
+				</tfoot>
+			</table>
+		</div>
+	</form>
+</div>
+{% endblock %}

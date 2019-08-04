@@ -1,0 +1,2 @@
+ALLOWED_HOSTS = ['baustunden.akaflieg-dresden.de']
+DEBUG = False

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+{% load staticfiles %}
+<html lang="de">
+<head>
+	<meta charset="utf-8">
+
+{% if user.is_authenticated %}
+	<link rel="stylesheet" type="text/css" href="//cdn.jsdelivr.net/bootstrap.daterangepicker/2/daterangepicker.css" />
+
+	<!--<link rel="stylesheet" type="text/css" href="{% static "daterangepicker.css" %}"/>--!>
+	<link href="{% static "sorttable.css" %}" rel="stylesheet">
+{% endif %}
+<!--	<link rel="shortcut icon" type="image/png" href="{% static "favicon.ico" %}"/>--!>
+
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css"
+		integrity="sha512-dTfge/zgoMYpP7QbHy4gWMEGsbsdZeCXz7irItjcC3sPUFtf0kuFbDz/ixG7ArTxmDjLXDmezHubeNikyKGVyQ==" crossorigin="anonymous">
+
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
+
+	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"
+		integrity="sha512-K1qjQ+NcF2TYO/eI3M6v8EiNYZfA95pQumfvcVrTHtwQVDG+aHRqLi/ETn2uB+1JqwYqVG3LIvdm9lj6imS/pQ==" crossorigin="anonymous"></script>
+
+{% if user.is_authenticated %}
+	<script src="{% static "sorttable.js" %}"></script>
+	<script type="text/javascript" src="//cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
+	<!--<script type="text/javascript" src="{% static "daterangepicker.js" %}"></script>--!>
+	<script type="text/javascript" src="//cdn.jsdelivr.net/bootstrap.daterangepicker/2/daterangepicker.js"></script>
+
+	<style>
+		table.sortable th:not(.sorttable_sorted):not(.sorttable_sorted_reverse):not(.sorttable_nosort):after { 
+		    content: " \25B4\25BE" 
+		}
+		.ok_button, .del_button{
+			margin-left: 10px;
+		}
+	</style>
+{% endif %}
+	<title>{% block title %}Baustunden{% endblock %}</title>
+</head>
+
+<body>
+	<nav class="navbar navbar-default navbar-static-top">
+	  <div class="container">
+	    <div class="navbar-header">
+	      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1" aria-expanded="false">
+		<span class="sr-only">Toggle navigation</span>
+		<span class="icon-bar"></span>
+		<span class="icon-bar"></span>
+		<span class="icon-bar"></span>
+	      </button>
+	      <a class="navbar-brand" href="/">Baustunden</a>
+	    </div>
+
+	{% if user.is_authenticated %}
+	    <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+	      <ul class="nav navbar-nav">
+		<li><a class="navlink" id="navlink_index" href="/">Baustunden<span class="sr-only">(current)</span></a></li>
+		<li><a class="navlink" id="navlink_users" href="/users">Arbeiter</a></li>
+		<li><a class="navlink" id="navlink_projects" href="/projects">Projekte</a></li>
+	      </ul>
+	      <ul class="nav navbar-nav navbar-right">
+		<p class="navbar-text">{{request.user.last_name}}</p>
+		<li><a href="/logout"> Ausloggen</a></li>
+	      </ul>
+	    </div><!-- /.navbar-collapse -->
+	{% endif %}
+	  </div>
+	</nav>
+
+	<div class="container-fluid">
+		<div class="row-fluid">
+			{% block content %}{% endblock %}
+		</div>
+	</div>
+</body>
+</html>
